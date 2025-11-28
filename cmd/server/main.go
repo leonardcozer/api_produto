@@ -4,7 +4,6 @@ import (
 	"context"
 	"log"
 	"net/http"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"api-go-arquitetura/internal/api"
 	"api-go-arquitetura/internal/api/handlers"
 	"api-go-arquitetura/internal/api/middleware"
+	"api-go-arquitetura/internal/config"
 	"api-go-arquitetura/internal/database"
 	"api-go-arquitetura/internal/repository"
 	"api-go-arquitetura/internal/service"
@@ -32,15 +32,27 @@ import (
 // @basePath /api
 // @schemes http
 func main() {
-	// Obter URI do MongoDB (usar MONGO_URI env var ou default)
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
-		log.Println("MONGO_URI não definida, usando padrão:", mongoURI)
+	// Carregar configurações
+	cfg := config.Load()
+	
+	// Validar configurações
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Erro na configuração: %v", err)
 	}
 
+	log.Printf("Configurações carregadas:")
+	log.Printf("  MongoDB URI: %s", cfg.MongoURI)
+	log.Printf("  Database: %s", cfg.Database)
+	log.Printf("  Port: %s", cfg.Port)
+
 	// Conectar ao MongoDB com tratamento de erro robusto
-	opts := database.DefaultConnectOptions(mongoURI)
+	opts := database.ConnectOptions{
+		URI:            cfg.MongoURI,
+		ConnectTimeout: cfg.ConnectTimeout,
+		MaxPoolSize:    cfg.MaxPoolSize,
+		MinPoolSize:    cfg.MinPoolSize,
+	}
+	
 	client, err := database.Connect(opts)
 	if err != nil {
 		log.Fatalf("Erro ao conectar ao MongoDB: %v", err)
@@ -54,12 +66,7 @@ func main() {
 	}()
 
 	// Obter coleção de produtos com tratamento de erro
-	dbName := os.Getenv("MONGO_DB")
-	if dbName == "" {
-		dbName = "api_go"
-	}
-
-	col, err := database.GetCollection(client, dbName, "produtos")
+	col, err := database.GetCollection(client, cfg.Database, "produtos")
 	if err != nil {
 		log.Fatalf("Erro ao obter coleção: %v", err)
 	}
@@ -88,13 +95,13 @@ func main() {
 	// Aplicar middlewares
 	handler := middleware.ApplyMiddlewares(router)
 
-	// Configurar servidor HTTP
+	// Configurar servidor HTTP usando configurações
 	srv := &http.Server{
-		Addr:         ":8080",
+		Addr:         cfg.Port,
 		Handler:      handler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		IdleTimeout:  cfg.IdleTimeout,
 	}
 
 	// Canal para receber sinais do sistema
@@ -103,8 +110,8 @@ func main() {
 
 	// Iniciar servidor em goroutine
 	go func() {
-		log.Println("Servidor iniciando na porta 8080...")
-		log.Println("Swagger disponível em http://localhost:8080/swagger/index.html")
+		log.Printf("Servidor iniciando na porta %s...", cfg.Port)
+		log.Printf("Swagger disponível em http://localhost%s/swagger/index.html", cfg.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Erro ao iniciar servidor: %v", err)
 		}
@@ -114,8 +121,8 @@ func main() {
 	<-quit
 	log.Println("Servidor sendo encerrado...")
 
-	// Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Graceful shutdown usando timeout da config
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {

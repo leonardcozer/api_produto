@@ -1,26 +1,101 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"strings"
+	"time"
 )
 
+// Config contém todas as configurações da aplicação
 type Config struct {
-	MongoURI string
-	Database string
-	Port     string
+	// MongoDB
+	MongoURI      string
+	Database      string
+	ConnectTimeout time.Duration
+	
+	// Server
+	Port          string
+	ReadTimeout   time.Duration
+	WriteTimeout  time.Duration
+	IdleTimeout   time.Duration
+	ShutdownTimeout time.Duration
+	
+	// Database Pool
+	MaxPoolSize  uint64
+	MinPoolSize  uint64
 }
 
+// Load carrega as configurações da aplicação a partir de variáveis de ambiente
+// com valores padrão apropriados
 func Load() Config {
+	port := getEnv("PORT", "8080")
+	// Garantir que a porta tenha o formato correto
+	if !strings.HasPrefix(port, ":") {
+		port = ":" + port
+	}
+
 	return Config{
-		MongoURI: getEnv("MONGO_URI", "mongodb://localhost:27017"),
-		Database: getEnv("MONGO_DB", "appdb"),
-		Port:     getEnv("PORT", ":8080"),
+		// MongoDB
+		MongoURI:       getEnv("MONGO_URI", "mongodb://localhost:27017"),
+		Database:        getEnv("MONGO_DB", "api_go"),
+		ConnectTimeout:  getDurationEnv("MONGO_CONNECT_TIMEOUT", 10*time.Second),
+		
+		// Server
+		Port:            port,
+		ReadTimeout:     getDurationEnv("READ_TIMEOUT", 15*time.Second),
+		WriteTimeout:    getDurationEnv("WRITE_TIMEOUT", 15*time.Second),
+		IdleTimeout:     getDurationEnv("IDLE_TIMEOUT", 60*time.Second),
+		ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 30*time.Second),
+		
+		// Database Pool
+		MaxPoolSize: getUint64Env("MONGO_MAX_POOL_SIZE", 100),
+		MinPoolSize: getUint64Env("MONGO_MIN_POOL_SIZE", 10),
 	}
 }
 
+// Validate valida as configurações e retorna erro se alguma estiver inválida
+func (c *Config) Validate() error {
+	if c.MongoURI == "" {
+		return fmt.Errorf("MONGO_URI não pode ser vazia")
+	}
+	if c.Database == "" {
+		return fmt.Errorf("MONGO_DB não pode ser vazio")
+	}
+	if c.Port == "" {
+		return fmt.Errorf("PORT não pode ser vazio")
+	}
+	if c.ConnectTimeout <= 0 {
+		return fmt.Errorf("MONGO_CONNECT_TIMEOUT deve ser maior que zero")
+	}
+	return nil
+}
+
+// getEnv obtém uma variável de ambiente ou retorna o valor padrão
 func getEnv(key, def string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return def
+}
+
+// getDurationEnv obtém uma variável de ambiente como duration ou retorna o valor padrão
+func getDurationEnv(key string, def time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
+		}
+	}
+	return def
+}
+
+// getUint64Env obtém uma variável de ambiente como uint64 ou retorna o valor padrão
+func getUint64Env(key string, def uint64) uint64 {
+	if value := os.Getenv(key); value != "" {
+		var result uint64
+		if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
+			return result
+		}
 	}
 	return def
 }

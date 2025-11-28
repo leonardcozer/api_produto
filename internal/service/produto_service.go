@@ -2,19 +2,19 @@ package service
 
 import (
 	"context"
-	"errors"
 
+	"api-go-arquitetura/internal/errors"
 	"api-go-arquitetura/internal/model"
 	"api-go-arquitetura/internal/repository"
 )
 
 // produtoService implementa a lógica de negócio para produtos
 type produtoService struct {
-	repo *repository.ProdutoRepository
+	repo repository.ProdutoRepository
 }
 
 // NewProdutoService cria uma nova instância do ProdutoService
-func NewProdutoService(repo *repository.ProdutoRepository) ProdutoService {
+func NewProdutoService(repo repository.ProdutoRepository) ProdutoService {
 	return &produtoService{
 		repo: repo,
 	}
@@ -22,66 +22,105 @@ func NewProdutoService(repo *repository.ProdutoRepository) ProdutoService {
 
 // Create cria um novo produto
 func (s *produtoService) Create(ctx context.Context, produto model.Produto) (model.Produto, error) {
-	// Validações de negócio podem ser adicionadas aqui
+	// Validações de negócio
 	if produto.Nome == "" {
-		return model.Produto{}, errors.New("nome do produto é obrigatório")
+		return model.Produto{}, errors.ErrNomeObrigatorio
 	}
-	if produto.Preco < 0 {
-		return model.Produto{}, errors.New("preço não pode ser negativo")
+	if produto.Preco <= 0 {
+		return model.Produto{}, errors.ErrPrecoInvalido
 	}
 
-	return s.repo.Create(ctx, produto)
+	result, err := s.repo.Create(ctx, produto)
+	if err != nil {
+		return model.Produto{}, errors.WrapError(err, errors.ErrDatabase)
+	}
+	return result, nil
 }
 
 // FindAll retorna todos os produtos
 func (s *produtoService) FindAll(ctx context.Context) ([]model.Produto, error) {
-	return s.repo.FindAll(ctx)
+	result, err := s.repo.FindAll(ctx)
+	if err != nil {
+		return nil, errors.WrapError(err, errors.ErrDatabase)
+	}
+	return result, nil
 }
 
 // FindByID retorna um produto pelo ID
 func (s *produtoService) FindByID(ctx context.Context, id int) (model.Produto, error) {
 	if id <= 0 {
-		return model.Produto{}, errors.New("ID inválido")
+		return model.Produto{}, errors.ErrInvalidID
 	}
-	return s.repo.FindByID(ctx, id)
+	
+	result, err := s.repo.FindByID(ctx, id)
+	if err != nil {
+		// Verificar se é erro de "not found" do repository
+		if err.Error() == "not found" {
+			return model.Produto{}, errors.ErrProdutoNotFound
+		}
+		return model.Produto{}, errors.WrapError(err, errors.ErrDatabase)
+	}
+	return result, nil
 }
 
 // Update atualiza um produto completamente
 func (s *produtoService) Update(ctx context.Context, id int, produto model.Produto) (model.Produto, error) {
 	if id <= 0 {
-		return model.Produto{}, errors.New("ID inválido")
+		return model.Produto{}, errors.ErrInvalidID
 	}
 	if produto.Nome == "" {
-		return model.Produto{}, errors.New("nome do produto é obrigatório")
+		return model.Produto{}, errors.ErrNomeObrigatorio
 	}
-	if produto.Preco < 0 {
-		return model.Produto{}, errors.New("preço não pode ser negativo")
+	if produto.Preco <= 0 {
+		return model.Produto{}, errors.ErrPrecoInvalido
 	}
 
-	return s.repo.Update(ctx, id, produto)
+	result, err := s.repo.Update(ctx, id, produto)
+	if err != nil {
+		if err.Error() == "not found" {
+			return model.Produto{}, errors.ErrProdutoNotFound
+		}
+		return model.Produto{}, errors.WrapError(err, errors.ErrDatabase)
+	}
+	return result, nil
 }
 
 // Patch atualiza um produto parcialmente
 func (s *produtoService) Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error) {
 	if id <= 0 {
-		return model.Produto{}, errors.New("ID inválido")
+		return model.Produto{}, errors.ErrInvalidID
 	}
 
 	// Validações específicas para campos que podem ser atualizados
 	if nome, ok := updates["nome"].(string); ok && nome == "" {
-		return model.Produto{}, errors.New("nome do produto não pode ser vazio")
+		return model.Produto{}, errors.ErrNomeObrigatorio
 	}
-	if preco, ok := updates["preco"].(float64); ok && preco < 0 {
-		return model.Produto{}, errors.New("preço não pode ser negativo")
+	if preco, ok := updates["preco"].(float64); ok && preco <= 0 {
+		return model.Produto{}, errors.ErrPrecoInvalido
 	}
 
-	return s.repo.Patch(ctx, id, updates)
+	result, err := s.repo.Patch(ctx, id, updates)
+	if err != nil {
+		if err.Error() == "not found" {
+			return model.Produto{}, errors.ErrProdutoNotFound
+		}
+		return model.Produto{}, errors.WrapError(err, errors.ErrDatabase)
+	}
+	return result, nil
 }
 
 // Delete remove um produto
 func (s *produtoService) Delete(ctx context.Context, id int) error {
 	if id <= 0 {
-		return errors.New("ID inválido")
+		return errors.ErrInvalidID
 	}
-	return s.repo.Delete(ctx, id)
+	
+	err := s.repo.Delete(ctx, id)
+	if err != nil {
+		if err.Error() == "not found" {
+			return errors.ErrProdutoNotFound
+		}
+		return errors.WrapError(err, errors.ErrDatabase)
+	}
+	return nil
 }

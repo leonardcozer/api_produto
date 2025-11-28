@@ -11,6 +11,7 @@
 .env.local
 ANALISE_CAMADAS.md
 REFATORACAO_HANDLERS.md
+REFATORACAO_DTOS.md
 api-go-arquitetura
 dist/
 build/

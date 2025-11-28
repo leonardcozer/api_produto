@@ -7,7 +7,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"api-go-arquitetura/internal/model"
+	"api-go-arquitetura/internal/dto"
 	"api-go-arquitetura/internal/service"
 )
 
@@ -36,8 +36,11 @@ func (h *ProdutoHandler) GetProdutos(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Converter models para DTOs
+	response := dto.ToProdutoListResponse(produtos)
+	
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(produtos)
+	json.NewEncoder(w).Encode(response)
 }
 
 // GetProduto obtém um produto por ID
@@ -61,8 +64,11 @@ func (h *ProdutoHandler) GetProduto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Converter model para DTO
+	response := dto.FromModel(produto)
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(produto)
+	json.NewEncoder(w).Encode(response)
 }
 
 // CreateProduto cria um novo produto
@@ -70,24 +76,30 @@ func (h *ProdutoHandler) GetProduto(w http.ResponseWriter, r *http.Request) {
 func (h *ProdutoHandler) CreateProduto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	var novoProduto model.Produto
-	err := json.NewDecoder(r.Body).Decode(&novoProduto)
+	var request dto.CreateProdutoRequest
+	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"erro": "Dados inválidos"})
 		return
 	}
 
+	// Converter DTO para model
+	produto := request.ToModel()
+
 	ctx := r.Context()
-	created, err := h.service.Create(ctx, novoProduto)
+	created, err := h.service.Create(ctx, produto)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"erro": err.Error()})
 		return
 	}
 
+	// Converter model para DTO de resposta
+	response := dto.FromModel(created)
+
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(created)
+	json.NewEncoder(w).Encode(response)
 }
 
 // UpdateProduto atualiza um produto completamente
@@ -103,16 +115,19 @@ func (h *ProdutoHandler) UpdateProduto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var produtoAtualizado model.Produto
-	err = json.NewDecoder(r.Body).Decode(&produtoAtualizado)
+	var request dto.UpdateProdutoRequest
+	err = json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"erro": "Dados inválidos"})
 		return
 	}
 
+	// Converter DTO para model
+	produto := request.ToModel()
+
 	ctx := r.Context()
-	updated, err := h.service.Update(ctx, id, produtoAtualizado)
+	updated, err := h.service.Update(ctx, id, produto)
 	if err != nil {
 		if err.Error() == "not found" {
 			w.WriteHeader(http.StatusNotFound)
@@ -124,8 +139,11 @@ func (h *ProdutoHandler) UpdateProduto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Converter model para DTO de resposta
+	response := dto.FromModel(updated)
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(updated)
+	json.NewEncoder(w).Encode(response)
 }
 
 // PatchProduto atualiza um produto parcialmente
@@ -141,15 +159,15 @@ func (h *ProdutoHandler) PatchProduto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var updates map[string]interface{}
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+	var request dto.PatchProdutoRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"erro": "Dados inválidos"})
 		return
 	}
 
-	// Remove possível campo id para evitar conflitos
-	delete(updates, "id")
+	// Converter DTO para map
+	updates := request.ToMap()
 
 	ctx := r.Context()
 	updated, err := h.service.Patch(ctx, id, updates)
@@ -164,8 +182,11 @@ func (h *ProdutoHandler) PatchProduto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Converter model para DTO de resposta
+	response := dto.FromModel(updated)
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(updated)
+	json.NewEncoder(w).Encode(response)
 }
 
 // DeleteProduto deleta um produto

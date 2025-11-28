@@ -1,10 +1,10 @@
 package model
 
-// Produto representa um produto da API
-// @Description Representa um produto da API
+// Produto representa a entidade de domínio de um produto
+// Esta é a entidade interna usada para persistência e lógica de negócio
 type Produto struct {
-	ID        int     `json:"id" bson:"id" example:"1"`
-	Nome      string  `json:"nome" bson:"nome" example:"Notebook"`
-	Preco     float64 `json:"preco" bson:"preco" example:"3500.00"`
-	Descricao string  `json:"descricao" bson:"descricao" example:"Notebook de alta performance"`
+	ID        int     `json:"id" bson:"id"`
+	Nome      string  `json:"nome" bson:"nome"`
+	Preco     float64 `json:"preco" bson:"preco"`
+	Descricao string  `json:"descricao" bson:"descricao"`
 }

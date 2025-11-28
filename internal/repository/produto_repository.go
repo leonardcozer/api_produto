@@ -11,15 +11,17 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type ProdutoRepository struct {
+// mongoProdutoRepository implementa ProdutoRepository usando MongoDB
+type mongoProdutoRepository struct {
 	Collection *mongo.Collection
 }
 
-func NewProdutoRepository(col *mongo.Collection) *ProdutoRepository {
-	return &ProdutoRepository{Collection: col}
+// NewProdutoRepository cria uma nova instância do ProdutoRepository
+func NewProdutoRepository(col *mongo.Collection) ProdutoRepository {
+	return &mongoProdutoRepository{Collection: col}
 }
 
-func (r *ProdutoRepository) getNextID(ctx context.Context) (int, error) {
+func (r *mongoProdutoRepository) getNextID(ctx context.Context) (int, error) {
 	opts := options.FindOne().SetSort(bson.D{{"id", -1}})
 	var p model.Produto
 	err := r.Collection.FindOne(ctx, bson.M{}, opts).Decode(&p)
@@ -32,7 +34,7 @@ func (r *ProdutoRepository) getNextID(ctx context.Context) (int, error) {
 	return p.ID + 1, nil
 }
 
-func (r *ProdutoRepository) Create(ctx context.Context, produto model.Produto) (model.Produto, error) {
+func (r *mongoProdutoRepository) Create(ctx context.Context, produto model.Produto) (model.Produto, error) {
 	id, err := r.getNextID(ctx)
 	if err != nil {
 		return model.Produto{}, err
@@ -45,7 +47,7 @@ func (r *ProdutoRepository) Create(ctx context.Context, produto model.Produto) (
 	return produto, nil
 }
 
-func (r *ProdutoRepository) FindAll(ctx context.Context) ([]model.Produto, error) {
+func (r *mongoProdutoRepository) FindAll(ctx context.Context) ([]model.Produto, error) {
 	cursor, err := r.Collection.Find(ctx, bson.M{})
 	if err != nil {
 		return nil, err
@@ -57,7 +59,7 @@ func (r *ProdutoRepository) FindAll(ctx context.Context) ([]model.Produto, error
 	return produtos, nil
 }
 
-func (r *ProdutoRepository) FindByID(ctx context.Context, id int) (model.Produto, error) {
+func (r *mongoProdutoRepository) FindByID(ctx context.Context, id int) (model.Produto, error) {
 	var produto model.Produto
 	err := r.Collection.FindOne(ctx, bson.M{"id": id}).Decode(&produto)
 	if err != nil {
@@ -69,7 +71,7 @@ func (r *ProdutoRepository) FindByID(ctx context.Context, id int) (model.Produto
 	return produto, nil
 }
 
-func (r *ProdutoRepository) Update(ctx context.Context, id int, produto model.Produto) (model.Produto, error) {
+func (r *mongoProdutoRepository) Update(ctx context.Context, id int, produto model.Produto) (model.Produto, error) {
 	produto.ID = id
 	res, err := r.Collection.ReplaceOne(ctx, bson.M{"id": id}, produto)
 	if err != nil {
@@ -81,7 +83,7 @@ func (r *ProdutoRepository) Update(ctx context.Context, id int, produto model.Pr
 	return produto, nil
 }
 
-func (r *ProdutoRepository) Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error) {
+func (r *mongoProdutoRepository) Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error) {
 	update := bson.M{"$set": updates}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	var updated model.Produto
@@ -95,7 +97,7 @@ func (r *ProdutoRepository) Patch(ctx context.Context, id int, updates map[strin
 	return updated, nil
 }
 
-func (r *ProdutoRepository) Delete(ctx context.Context, id int) error {
+func (r *mongoProdutoRepository) Delete(ctx context.Context, id int) error {
 	res, err := r.Collection.DeleteOne(ctx, bson.M{"id": id})
 	if err != nil {
 		return err

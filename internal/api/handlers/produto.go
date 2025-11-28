@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/mux"
 
@@ -217,10 +219,42 @@ func (h *ProdutoHandler) DeleteProduto(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// HealthCheck verifica o status da API
+// HealthCheckHandler gerencia o health check da API
+type HealthCheckHandler struct {
+	healthCheckFunc func(ctx context.Context) error
+}
+
+// NewHealthCheckHandler cria uma nova instância do HealthCheckHandler
+func NewHealthCheckHandler(healthCheckFunc func(ctx context.Context) error) *HealthCheckHandler {
+	return &HealthCheckHandler{
+		healthCheckFunc: healthCheckFunc,
+	}
+}
+
+// HealthCheck verifica o status da API e da conexão com o banco de dados
 // GET /health
-func HealthCheck(w http.ResponseWriter, r *http.Request) {
+func (h *HealthCheckHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	// Verificar conexão com banco de dados se função disponível
+	if h.healthCheckFunc != nil {
+		if err := h.healthCheckFunc(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"status":  "unhealthy",
+				"message": "Conexão com banco de dados falhou",
+				"error":   err.Error(),
+			})
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "healthy",
+		"message": "API e banco de dados estão funcionando",
+	})
 }

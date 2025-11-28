@@ -7,7 +7,7 @@ import (
 )
 
 // NewRouter monta e retorna o router com as rotas registradas pelos handlers
-func NewRouter(produtoHandler *handlers.ProdutoHandler) *mux.Router {
+func NewRouter(produtoHandler *handlers.ProdutoHandler, healthCheckHandler *handlers.HealthCheckHandler) *mux.Router {
 	router := mux.NewRouter()
 
 	// Rotas para produtos
@@ -19,7 +19,9 @@ func NewRouter(produtoHandler *handlers.ProdutoHandler) *mux.Router {
 	router.HandleFunc("/api/produtos/{id}", produtoHandler.DeleteProduto).Methods("DELETE")
 
 	// Rota de health check
-	router.HandleFunc("/health", handlers.HealthCheck).Methods("GET")
+	if healthCheckHandler != nil {
+		router.HandleFunc("/health", healthCheckHandler.HealthCheck).Methods("GET")
+	}
 
 	return router
 }

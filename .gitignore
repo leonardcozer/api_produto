@@ -9,6 +9,8 @@
 *~
 .env
 .env.local
+ANALISE_CAMADAS.md
+REFATORACAO_HANDLERS.md
 api-go-arquitetura
 dist/
 build/

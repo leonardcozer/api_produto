@@ -8,32 +8,41 @@ import (
 	"github.com/gorilla/mux"
 
 	"api-go-arquitetura/internal/model"
-	"api-go-arquitetura/internal/repository"
+	"api-go-arquitetura/internal/service"
 )
 
-var repo *repository.ProdutoRepository
-
-// SetRepository injeta o repositório usado pelos handlers
-func SetRepository(r *repository.ProdutoRepository) {
-	repo = r
+// ProdutoHandler gerencia os handlers de produto
+type ProdutoHandler struct {
+	service service.ProdutoService
 }
 
-// GET - Listar todos os produtos
-func GetProdutos(w http.ResponseWriter, r *http.Request) {
+// NewProdutoHandler cria uma nova instância do ProdutoHandler
+func NewProdutoHandler(svc service.ProdutoService) *ProdutoHandler {
+	return &ProdutoHandler{
+		service: svc,
+	}
+}
+
+// GetProdutos lista todos os produtos
+// GET /api/produtos
+func (h *ProdutoHandler) GetProdutos(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	ctx := r.Context()
-	produtos, err := repo.FindAll(ctx)
+	
+	produtos, err := h.service.FindAll(ctx)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{"erro": "Erro ao buscar produtos"})
 		return
 	}
+	
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(produtos)
 }
 
-// GET - Obter produto por ID
-func GetProduto(w http.ResponseWriter, r *http.Request) {
+// GetProduto obtém um produto por ID
+// GET /api/produtos/{id}
+func (h *ProdutoHandler) GetProduto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
@@ -43,19 +52,22 @@ func GetProduto(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"erro": "ID inválido"})
 		return
 	}
+
 	ctx := r.Context()
-	produto, err := repo.FindByID(ctx, id)
+	produto, err := h.service.FindByID(ctx, id)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(map[string]string{"erro": "Produto não encontrado"})
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(produto)
 }
 
-// POST - Criar novo produto
-func CreateProduto(w http.ResponseWriter, r *http.Request) {
+// CreateProduto cria um novo produto
+// POST /api/produtos
+func (h *ProdutoHandler) CreateProduto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	var novoProduto model.Produto
@@ -65,19 +77,22 @@ func CreateProduto(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"erro": "Dados inválidos"})
 		return
 	}
+
 	ctx := r.Context()
-	created, err := repo.Create(ctx, novoProduto)
+	created, err := h.service.Create(ctx, novoProduto)
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"erro": "Erro ao criar produto"})
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"erro": err.Error()})
 		return
 	}
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(created)
 }
 
-// PUT - Atualizar produto completo
-func UpdateProduto(w http.ResponseWriter, r *http.Request) {
+// UpdateProduto atualiza um produto completamente
+// PUT /api/produtos/{id}
+func (h *ProdutoHandler) UpdateProduto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
@@ -95,19 +110,27 @@ func UpdateProduto(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"erro": "Dados inválidos"})
 		return
 	}
+
 	ctx := r.Context()
-	updated, err := repo.Update(ctx, id, produtoAtualizado)
+	updated, err := h.service.Update(ctx, id, produtoAtualizado)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"erro": "Produto não encontrado"})
+		if err.Error() == "not found" {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"erro": "Produto não encontrado"})
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"erro": err.Error()})
+		}
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updated)
 }
 
-// PATCH - Atualizar produto parcialmente
-func PatchProduto(w http.ResponseWriter, r *http.Request) {
+// PatchProduto atualiza um produto parcialmente
+// PATCH /api/produtos/{id}
+func (h *ProdutoHandler) PatchProduto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
@@ -117,27 +140,37 @@ func PatchProduto(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"erro": "ID inválido"})
 		return
 	}
+
 	var updates map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"erro": "Dados inválidos"})
 		return
 	}
-	// clean possible id field
+
+	// Remove possível campo id para evitar conflitos
 	delete(updates, "id")
+
 	ctx := r.Context()
-	updated, err := repo.Patch(ctx, id, updates)
+	updated, err := h.service.Patch(ctx, id, updates)
 	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"erro": "Produto não encontrado"})
+		if err.Error() == "not found" {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"erro": "Produto não encontrado"})
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"erro": err.Error()})
+		}
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updated)
 }
 
-// DELETE - Deletar produto
-func DeleteProduto(w http.ResponseWriter, r *http.Request) {
+// DeleteProduto deleta um produto
+// DELETE /api/produtos/{id}
+func (h *ProdutoHandler) DeleteProduto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	vars := mux.Vars(r)
@@ -147,16 +180,24 @@ func DeleteProduto(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]string{"erro": "ID inválido"})
 		return
 	}
+
 	ctx := r.Context()
-	if err := repo.Delete(ctx, id); err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(map[string]string{"erro": "Produto não encontrado"})
+	if err := h.service.Delete(ctx, id); err != nil {
+		if err.Error() == "not found" {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(map[string]string{"erro": "Produto não encontrado"})
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(map[string]string{"erro": err.Error()})
+		}
 		return
 	}
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Health check
+// HealthCheck verifica o status da API
+// GET /health
 func HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

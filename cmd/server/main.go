@@ -11,6 +11,7 @@ import (
 	"api-go-arquitetura/internal/api/middleware"
 	"api-go-arquitetura/internal/database"
 	"api-go-arquitetura/internal/repository"
+	"api-go-arquitetura/internal/service"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 )
@@ -37,11 +38,17 @@ func main() {
 	// obter coleção de produtos
 	col := client.Database("api_go").Collection("produtos")
 
-	// criar repositório e injetar nos handlers
+	// criar repositório
 	prodRepo := repository.NewProdutoRepository(col)
-	handlers.SetRepository(prodRepo)
 
-	router := api.NewRouter()
+	// criar service e injetar o repositório
+	prodService := service.NewProdutoService(prodRepo)
+
+	// criar handler e injetar o service
+	produtoHandler := handlers.NewProdutoHandler(prodService)
+
+	// criar router e injetar o handler
+	router := api.NewRouter(produtoHandler)
 
 	// Rota do Swagger
 	router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)

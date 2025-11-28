@@ -8,20 +8,20 @@ import (
 	"api-go-arquitetura/internal/repository"
 )
 
-// ProdutoService implementa a lógica de negócio para produtos
-type ProdutoService struct {
+// produtoService implementa a lógica de negócio para produtos
+type produtoService struct {
 	repo *repository.ProdutoRepository
 }
 
 // NewProdutoService cria uma nova instância do ProdutoService
 func NewProdutoService(repo *repository.ProdutoRepository) ProdutoService {
-	return &ProdutoService{
+	return &produtoService{
 		repo: repo,
 	}
 }
 
 // Create cria um novo produto
-func (s *ProdutoService) Create(ctx context.Context, produto model.Produto) (model.Produto, error) {
+func (s *produtoService) Create(ctx context.Context, produto model.Produto) (model.Produto, error) {
 	// Validações de negócio podem ser adicionadas aqui
 	if produto.Nome == "" {
 		return model.Produto{}, errors.New("nome do produto é obrigatório")
@@ -34,12 +34,12 @@ func (s *ProdutoService) Create(ctx context.Context, produto model.Produto) (mod
 }
 
 // FindAll retorna todos os produtos
-func (s *ProdutoService) FindAll(ctx context.Context) ([]model.Produto, error) {
+func (s *produtoService) FindAll(ctx context.Context) ([]model.Produto, error) {
 	return s.repo.FindAll(ctx)
 }
 
 // FindByID retorna um produto pelo ID
-func (s *ProdutoService) FindByID(ctx context.Context, id int) (model.Produto, error) {
+func (s *produtoService) FindByID(ctx context.Context, id int) (model.Produto, error) {
 	if id <= 0 {
 		return model.Produto{}, errors.New("ID inválido")
 	}
@@ -47,7 +47,7 @@ func (s *ProdutoService) FindByID(ctx context.Context, id int) (model.Produto, e
 }
 
 // Update atualiza um produto completamente
-func (s *ProdutoService) Update(ctx context.Context, id int, produto model.Produto) (model.Produto, error) {
+func (s *produtoService) Update(ctx context.Context, id int, produto model.Produto) (model.Produto, error) {
 	if id <= 0 {
 		return model.Produto{}, errors.New("ID inválido")
 	}
@@ -62,7 +62,7 @@ func (s *ProdutoService) Update(ctx context.Context, id int, produto model.Produ
 }
 
 // Patch atualiza um produto parcialmente
-func (s *ProdutoService) Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error) {
+func (s *produtoService) Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error) {
 	if id <= 0 {
 		return model.Produto{}, errors.New("ID inválido")
 	}
@@ -79,7 +79,7 @@ func (s *ProdutoService) Patch(ctx context.Context, id int, updates map[string]i
 }
 
 // Delete remove um produto
-func (s *ProdutoService) Delete(ctx context.Context, id int) error {
+func (s *produtoService) Delete(ctx context.Context, id int) error {
 	if id <= 0 {
 		return errors.New("ID inválido")
 	}

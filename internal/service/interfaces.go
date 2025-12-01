@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"api-go-arquitetura/internal/dto"
 	"api-go-arquitetura/internal/model"
 )
 
@@ -14,5 +15,7 @@ type ProdutoService interface {
 	Update(ctx context.Context, id int, produto model.Produto) (model.Produto, error)
 	Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error)
 	Delete(ctx context.Context, id int) error
+	// Novos métodos para paginação e filtros
+	FindAllPaginated(ctx context.Context, pagination dto.PaginationRequest, filter dto.FilterRequest) ([]model.Produto, dto.PaginationResponse, error)
 }
 

@@ -15,6 +15,7 @@ import (
 	"api-go-arquitetura/internal/config"
 	"api-go-arquitetura/internal/database"
 	"api-go-arquitetura/internal/logger"
+	"api-go-arquitetura/internal/metrics"
 	"api-go-arquitetura/internal/repository"
 	"api-go-arquitetura/internal/service"
 
@@ -73,6 +74,13 @@ func main() {
 		logger.WithField("error", err).Fatal("Erro ao obter coleção")
 	}
 
+	// Criar índices otimizados
+	ctxIndex, cancelIndex := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelIndex()
+	if err := database.CreateIndexes(ctxIndex, client, cfg.Database, "produtos"); err != nil {
+		logger.WithField("error", err).Warn("Erro ao criar índices (continuando mesmo assim)")
+	}
+
 	// Criar repositório
 	prodRepo := repository.NewProdutoRepository(col)
 
@@ -93,6 +101,9 @@ func main() {
 
 	// Rota do Swagger
 	router.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
+
+	// Rota de métricas Prometheus
+	router.Handle("/metrics", metrics.GetHandler()).Methods("GET")
 
 	// Aplicar middlewares
 	handler := middleware.ApplyMiddlewares(router)

@@ -8,6 +8,7 @@ import (
 
 	"api-go-arquitetura/internal/logger"
 
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -99,6 +100,50 @@ func Disconnect(ctx context.Context, client *mongo.Client) error {
 	}
 
 	logger.Info("Conexão com MongoDB fechada com sucesso")
+	return nil
+}
+
+// CreateIndexes cria índices otimizados para a coleção de produtos
+func CreateIndexes(ctx context.Context, client *mongo.Client, database, collection string) error {
+	col := client.Database(database).Collection(collection)
+
+	// Índice único no campo ID
+	idIndex := mongo.IndexModel{
+		Keys: bson.D{{Key: "id", Value: 1}},
+		Options: options.Index().SetUnique(true).SetName("idx_id"),
+	}
+
+	// Índice de texto para busca por nome (case-insensitive)
+	nomeIndex := mongo.IndexModel{
+		Keys: bson.D{{Key: "nome", Value: 1}},
+		Options: options.Index().SetName("idx_nome"),
+	}
+
+	// Índice para busca por descrição
+	descricaoIndex := mongo.IndexModel{
+		Keys: bson.D{{Key: "descricao", Value: 1}},
+		Options: options.Index().SetName("idx_descricao"),
+	}
+
+	// Índice composto para filtros de preço
+	precoIndex := mongo.IndexModel{
+		Keys: bson.D{{Key: "preco", Value: 1}},
+		Options: options.Index().SetName("idx_preco"),
+	}
+
+	// Criar todos os índices
+	indexes := []mongo.IndexModel{idIndex, nomeIndex, descricaoIndex, precoIndex}
+	_, err := col.Indexes().CreateMany(ctx, indexes)
+	if err != nil {
+		return fmt.Errorf("erro ao criar índices: %w", err)
+	}
+
+	logger.WithFields(map[string]interface{}{
+		"database":   database,
+		"collection": collection,
+		"indexes":    len(indexes),
+	}).Info("Índices criados com sucesso")
+
 	return nil
 }
 

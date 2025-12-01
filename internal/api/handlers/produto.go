@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -27,21 +28,88 @@ func NewProdutoHandler(svc service.ProdutoService) *ProdutoHandler {
 	}
 }
 
-// GetProdutos lista todos os produtos
-// GET /api/produtos
+// GetProdutos lista todos os produtos (com suporte a paginação e filtros)
+// GET /api/produtos?page=1&pageSize=10&nome=notebook&precoMin=1000&precoMax=5000
 func (h *ProdutoHandler) GetProdutos(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	
-	produtos, err := h.service.FindAll(ctx)
+	// Parse de parâmetros de paginação
+	pagination := dto.PaginationRequest{
+		Page:     getIntQuery(r, "page", 1),
+		PageSize: getIntQuery(r, "pageSize", 10),
+	}
+
+	// Parse de filtros
+	filter := dto.FilterRequest{
+		Nome:      getStringQuery(r, "nome"),
+		PrecoMin:  getFloatQuery(r, "precoMin"),
+		PrecoMax:  getFloatQuery(r, "precoMax"),
+		Descricao: getStringQuery(r, "descricao"),
+	}
+
+	// Se não há filtros e paginação padrão, usar método antigo para compatibilidade
+	if filter.IsEmpty() && pagination.Page == 1 && pagination.PageSize == 10 {
+		// Verificar se há parâmetros de query explícitos
+		if r.URL.Query().Get("page") == "" && r.URL.Query().Get("pageSize") == "" {
+			// Usar método antigo (sem paginação)
+			produtos, err := h.service.FindAll(ctx)
+			if err != nil {
+				utils.ErrorResponse(w, errors.WrapError(err, errors.ErrDatabase))
+				return
+			}
+			response := dto.ToProdutoListResponse(produtos)
+			utils.SuccessResponse(w, http.StatusOK, response)
+			return
+		}
+	}
+
+	// Usar método paginado
+	produtos, paginationResp, err := h.service.FindAllPaginated(ctx, pagination, filter)
 	if err != nil {
 		utils.ErrorResponse(w, errors.WrapError(err, errors.ErrDatabase))
 		return
 	}
-	
+
 	// Converter models para DTOs
-	response := dto.ToProdutoListResponse(produtos)
-	
+	produtosDTO := dto.FromModelList(produtos)
+	response := dto.ToPaginatedResponse(produtosDTO, paginationResp)
+
 	utils.SuccessResponse(w, http.StatusOK, response)
+}
+
+// getIntQuery obtém um parâmetro de query como int
+func getIntQuery(r *http.Request, key string, defaultValue int) int {
+	value := r.URL.Query().Get(key)
+	if value == "" {
+		return defaultValue
+	}
+	var result int
+	if _, err := fmt.Sscanf(value, "%d", &result); err != nil {
+		return defaultValue
+	}
+	return result
+}
+
+// getStringQuery obtém um parâmetro de query como string (retorna nil se vazio)
+func getStringQuery(r *http.Request, key string) *string {
+	value := r.URL.Query().Get(key)
+	if value == "" {
+		return nil
+	}
+	return &value
+}
+
+// getFloatQuery obtém um parâmetro de query como float64 (retorna nil se vazio)
+func getFloatQuery(r *http.Request, key string) *float64 {
+	value := r.URL.Query().Get(key)
+	if value == "" {
+		return nil
+	}
+	var result float64
+	if _, err := fmt.Sscanf(value, "%f", &result); err != nil {
+		return nil
+	}
+	return &result
 }
 
 // GetProduto obtém um produto por ID

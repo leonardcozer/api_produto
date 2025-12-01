@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"api-go-arquitetura/internal/dto"
 	"api-go-arquitetura/internal/errors"
 	"api-go-arquitetura/internal/model"
 	"api-go-arquitetura/internal/repository"
@@ -123,4 +124,30 @@ func (s *produtoService) Delete(ctx context.Context, id int) error {
 		return errors.WrapError(err, errors.ErrDatabase)
 	}
 	return nil
+}
+
+// FindAllPaginated retorna produtos paginados com filtros
+func (s *produtoService) FindAllPaginated(ctx context.Context, pagination dto.PaginationRequest, filter dto.FilterRequest) ([]model.Produto, dto.PaginationResponse, error) {
+	// Validar paginação
+	pagination.Validate()
+
+	// Converter filtro para MongoDB
+	mongoFilter := filter.ToMongoFilter()
+
+	// Contar total de documentos
+	totalItems, err := s.repo.Count(ctx, mongoFilter)
+	if err != nil {
+		return nil, dto.PaginationResponse{}, errors.WrapError(err, errors.ErrDatabase)
+	}
+
+	// Buscar produtos paginados
+	produtos, err := s.repo.FindAllPaginated(ctx, pagination.GetSkip(), pagination.GetLimit(), mongoFilter)
+	if err != nil {
+		return nil, dto.PaginationResponse{}, errors.WrapError(err, errors.ErrDatabase)
+	}
+
+	// Criar resposta de paginação
+	paginationResp := dto.NewPaginationResponse(pagination.Page, pagination.PageSize, int(totalItems))
+
+	return produtos, paginationResp, nil
 }

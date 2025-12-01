@@ -107,3 +107,45 @@ func (r *mongoProdutoRepository) Delete(ctx context.Context, id int) error {
 	}
 	return nil
 }
+
+// FindAllPaginated retorna produtos paginados com filtros
+func (r *mongoProdutoRepository) FindAllPaginated(ctx context.Context, skip, limit int64, filter map[string]interface{}) ([]model.Produto, error) {
+	// Converter filter para bson.M
+	mongoFilter := bson.M{}
+	if filter != nil {
+		mongoFilter = bson.M(filter)
+	}
+
+	// Opções de paginação
+	opts := options.Find().
+		SetSkip(skip).
+		SetLimit(limit).
+		SetSort(bson.D{{"id", 1}}) // Ordenar por ID
+
+	cursor, err := r.Collection.Find(ctx, mongoFilter, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var produtos []model.Produto
+	if err = cursor.All(ctx, &produtos); err != nil {
+		return nil, err
+	}
+	return produtos, nil
+}
+
+// Count retorna o total de documentos que correspondem ao filtro
+func (r *mongoProdutoRepository) Count(ctx context.Context, filter map[string]interface{}) (int64, error) {
+	// Converter filter para bson.M
+	mongoFilter := bson.M{}
+	if filter != nil {
+		mongoFilter = bson.M(filter)
+	}
+
+	count, err := r.Collection.CountDocuments(ctx, mongoFilter)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}

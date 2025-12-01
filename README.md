@@ -89,6 +89,10 @@ api-go-arquitetura/
 
 - **GET /health** - Verificar saúde da aplicação
 
+### Observabilidade
+
+- **GET /metrics** - Métricas Prometheus
+
 ## 🚀 Como Executar
 
 ### Pré-requisitos
@@ -168,7 +172,17 @@ go test -v ./...
 
 ### GET - Listar todos os produtos
 ```bash
+# Listar todos (compatibilidade)
 curl http://localhost:8080/api/produtos
+
+# Com paginação
+curl "http://localhost:8080/api/produtos?page=1&pageSize=10"
+
+# Com filtros
+curl "http://localhost:8080/api/produtos?nome=notebook&precoMin=1000&precoMax=5000"
+
+# Com paginação e filtros
+curl "http://localhost:8080/api/produtos?page=1&pageSize=10&nome=notebook&precoMin=1000"
 ```
 
 ### GET - Obter produto específico
@@ -215,6 +229,11 @@ curl -X DELETE http://localhost:8080/api/produtos/1
 ### Health Check
 ```bash
 curl http://localhost:8080/health
+```
+
+### Métricas Prometheus
+```bash
+curl http://localhost:8080/metrics
 ```
 
 ## 🛠️ Tecnologias
@@ -282,6 +301,9 @@ go test ./internal/service/...
 - ✅ Documentação Swagger
 - ✅ Graceful shutdown
 - ✅ Testes unitários
+- ✅ **Paginação** (page, pageSize)
+- ✅ **Filtros e Busca** (nome, precoMin, precoMax, descricao)
+- ✅ **Métricas Prometheus** (endpoint /metrics)
 
 ## 📝 Exemplos de Respostas
 

@@ -28,25 +28,36 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 		start := time.Now()
 		rw := newResponseWriter(w)
 		
+		// Obter request ID do contexto
+		requestID := GetRequestID(r)
+		
 		// Log da requisição recebida
-		logger.WithFields(map[string]interface{}{
+		logFields := map[string]interface{}{
 			"method":      r.Method,
 			"path":        r.URL.Path,
 			"remote_addr": r.RemoteAddr,
 			"user_agent":  r.UserAgent(),
-		}).Info("Request received")
+		}
+		if requestID != "" {
+			logFields["request_id"] = requestID
+		}
+		logger.WithFields(logFields).Info("Request received")
 		
 		next.ServeHTTP(rw, r)
 		
 		dur := time.Since(start)
 		
 		// Log da resposta
-		logger.WithFields(map[string]interface{}{
+		responseFields := map[string]interface{}{
 			"method":      r.Method,
 			"path":        r.URL.Path,
 			"status_code": rw.statusCode,
 			"duration_ms": dur.Milliseconds(),
 			"duration":    dur.String(),
-		}).Info("Request completed")
+		}
+		if requestID != "" {
+			responseFields["request_id"] = requestID
+		}
+		logger.WithFields(responseFields).Info("Request completed")
 	})
 }

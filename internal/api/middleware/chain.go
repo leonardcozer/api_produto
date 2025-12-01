@@ -5,7 +5,7 @@ import (
 )
 
 // ApplyMiddlewares aplica a cadeia de middlewares ao handler fornecido
-// Ordem: Metrics -> Logging -> Recovery -> CORS -> RateLimit
+// Ordem: RequestID -> Metrics -> Logging -> Recovery -> CORS -> RateLimit
 func ApplyMiddlewares(h http.Handler) http.Handler {
-	return RateLimitMiddleware(CORSMiddleware(RecoveryMiddleware(LoggingMiddleware(MetricsMiddleware(h)))))
+	return RateLimitMiddleware(CORSMiddleware(RecoveryMiddleware(LoggingMiddleware(MetricsMiddleware(RequestIDMiddleware(h))))))
 }

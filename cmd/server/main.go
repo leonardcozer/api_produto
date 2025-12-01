@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -15,6 +14,7 @@ import (
 	"api-go-arquitetura/internal/api/middleware"
 	"api-go-arquitetura/internal/config"
 	"api-go-arquitetura/internal/database"
+	"api-go-arquitetura/internal/logger"
 	"api-go-arquitetura/internal/repository"
 	"api-go-arquitetura/internal/service"
 
@@ -38,13 +38,14 @@ func main() {
 	
 	// Validar configurações
 	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Erro na configuração: %v", err)
+		logger.Fatalf("Erro na configuração: %v", err)
 	}
 
-	log.Printf("Configurações carregadas:")
-	log.Printf("  MongoDB URI: %s", cfg.MongoURI)
-	log.Printf("  Database: %s", cfg.Database)
-	log.Printf("  Port: %s", cfg.Port)
+	logger.WithFields(map[string]interface{}{
+		"mongo_uri": cfg.MongoURI,
+		"database":  cfg.Database,
+		"port":      cfg.Port,
+	}).Info("Configurações carregadas")
 
 	// Conectar ao MongoDB com tratamento de erro robusto
 	opts := database.ConnectOptions{
@@ -56,20 +57,20 @@ func main() {
 	
 	client, err := database.Connect(opts)
 	if err != nil {
-		log.Fatalf("Erro ao conectar ao MongoDB: %v", err)
+		logger.WithField("error", err).Fatal("Erro ao conectar ao MongoDB")
 	}
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := database.Disconnect(ctx, client); err != nil {
-			log.Printf("Erro ao fechar conexão com MongoDB: %v", err)
+			logger.WithField("error", err).Error("Erro ao fechar conexão com MongoDB")
 		}
 	}()
 
 	// Obter coleção de produtos com tratamento de erro
 	col, err := database.GetCollection(client, cfg.Database, "produtos")
 	if err != nil {
-		log.Fatalf("Erro ao obter coleção: %v", err)
+		logger.WithField("error", err).Fatal("Erro ao obter coleção")
 	}
 
 	// Criar repositório
@@ -111,24 +112,27 @@ func main() {
 
 	// Iniciar servidor em goroutine
 	go func() {
-		log.Printf("Servidor iniciando na porta %s...", cfg.Port)
-		log.Printf("Swagger disponível em http://localhost%s/swagger/index.html", cfg.Port)
+		logger.WithFields(map[string]interface{}{
+			"port":    cfg.Port,
+			"swagger": "http://localhost" + cfg.Port + "/swagger/index.html",
+		}).Info("Servidor iniciando")
+		
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Erro ao iniciar servidor: %v", err)
+			logger.WithField("error", err).Fatal("Erro ao iniciar servidor")
 		}
 	}()
 
 	// Aguardar sinal de interrupção
 	<-quit
-	log.Println("Servidor sendo encerrado...")
+	logger.Info("Servidor sendo encerrado...")
 
 	// Graceful shutdown usando timeout da config
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Erro ao encerrar servidor: %v", err)
+		logger.WithField("error", err).Fatal("Erro ao encerrar servidor")
 	}
 
-	log.Println("Servidor encerrado com sucesso")
+	logger.Info("Servidor encerrado com sucesso")
 }

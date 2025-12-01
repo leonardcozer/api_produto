@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"time"
+
+	"api-go-arquitetura/internal/logger"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -69,7 +70,7 @@ func Connect(opts ConnectOptions) (*mongo.Client, error) {
 		return nil, fmt.Errorf("%w: %v", ErrPingFailed, err)
 	}
 
-	log.Printf("Conexão com MongoDB estabelecida com sucesso: %s", opts.URI)
+	logger.WithField("uri", opts.URI).Info("Conexão com MongoDB estabelecida com sucesso")
 	return client, nil
 }
 
@@ -97,7 +98,7 @@ func Disconnect(ctx context.Context, client *mongo.Client) error {
 		return fmt.Errorf("erro ao desconectar do MongoDB: %w", err)
 	}
 
-	log.Println("Conexão com MongoDB fechada com sucesso")
+	logger.Info("Conexão com MongoDB fechada com sucesso")
 	return nil
 }
 

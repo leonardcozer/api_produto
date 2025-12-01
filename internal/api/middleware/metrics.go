@@ -25,4 +25,3 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 		metrics.RecordHTTPRequest(r.Method, r.URL.Path, rw.statusCode, duration)
 	})
 }
-

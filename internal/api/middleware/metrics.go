@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"net/http"
-	"strconv"
 	"time"
 
 	"api-go-arquitetura/internal/metrics"
@@ -21,7 +20,6 @@ func MetricsMiddleware(next http.Handler) http.Handler {
 		next.ServeHTTP(rw, r)
 
 		duration := time.Since(start)
-		statusCode := strconv.Itoa(rw.statusCode)
 
 		// Registrar métricas
 		metrics.RecordHTTPRequest(r.Method, r.URL.Path, rw.statusCode, duration)

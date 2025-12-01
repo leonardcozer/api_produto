@@ -119,6 +119,10 @@ O projeto suporta as seguintes variáveis de ambiente:
 - `LOG_LEVEL` - Nível de log: `debug`, `info`, `warn`, `error` (padrão: `info`)
 - `LOG_FORMAT` - Formato de log: `json` ou `text` (padrão: `text`)
 
+#### Observabilidade (Loki/Grafana)
+- `LOKI_URL` - URL do endpoint Loki para envio de logs (ex: `http://10.110.0.239:3100/loki/api/v1/push`)
+- `LOKI_JOB` - Nome do job para identificação no Grafana (padrão: `ARQUITETURA`)
+
 ### Com Docker Compose
 
 ```bash

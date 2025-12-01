@@ -135,4 +135,7 @@ func main() {
 	}
 
 	logger.Info("Servidor encerrado com sucesso")
+	
+	// Fazer shutdown do logger (flush final para Loki)
+	logger.Shutdown()
 }

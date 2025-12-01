@@ -9,13 +9,15 @@ import (
 var (
 	// Log é a instância global do logger estruturado
 	Log *logrus.Logger
+	// lokiHook é o hook para enviar logs ao Loki
+	lokiHook *LokiHook
 )
 
 func init() {
 	Log = logrus.New()
 	
-	// Configurar formato JSON para produção
-	if os.Getenv("LOG_FORMAT") == "json" {
+	// Configurar formato JSON para produção (Loki requer JSON)
+	if os.Getenv("LOG_FORMAT") == "json" || os.Getenv("LOKI_URL") != "" {
 		Log.SetFormatter(&logrus.JSONFormatter{
 			TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
 		})
@@ -42,8 +44,33 @@ func init() {
 		Log.SetLevel(logrus.InfoLevel)
 	}
 	
-	// Output para stdout
+	// Output para stdout (sempre manter para logs locais)
 	Log.SetOutput(os.Stdout)
+	
+	// Configurar hook do Loki se URL estiver configurada
+	lokiURL := os.Getenv("LOKI_URL")
+	lokiJob := os.Getenv("LOKI_JOB")
+	if lokiJob == "" {
+		lokiJob = "ARQUITETURA" // Valor padrão
+	}
+	
+	if lokiURL != "" {
+		lokiHook = NewLokiHook(lokiURL, lokiJob)
+		if lokiHook != nil {
+			Log.AddHook(lokiHook)
+			// Forçar formato JSON quando Loki está ativo
+			Log.SetFormatter(&logrus.JSONFormatter{
+				TimestampFormat: "2006-01-02T15:04:05.000Z07:00",
+			})
+		}
+	}
+}
+
+// Shutdown encerra o logger e faz flush final dos logs para Loki
+func Shutdown() {
+	if lokiHook != nil {
+		lokiHook.Stop()
+	}
 }
 
 // WithField adiciona um campo ao logger

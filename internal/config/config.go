@@ -24,6 +24,10 @@ type Config struct {
 	// Database Pool
 	MaxPoolSize  uint64
 	MinPoolSize  uint64
+	
+	// Observability
+	LokiURL string
+	LokiJob string
 }
 
 // Load carrega as configurações da aplicação a partir de variáveis de ambiente
@@ -51,6 +55,10 @@ func Load() Config {
 		// Database Pool
 		MaxPoolSize: getUint64Env("MONGO_MAX_POOL_SIZE", 100),
 		MinPoolSize: getUint64Env("MONGO_MIN_POOL_SIZE", 10),
+		
+		// Observability
+		LokiURL: getEnv("LOKI_URL", ""),
+		LokiJob: getEnv("LOKI_JOB", "ARQUITETURA"),
 	}
 }
 

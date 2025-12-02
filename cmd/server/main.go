@@ -125,6 +125,9 @@ func main() {
 	// Rota de métricas Prometheus
 	router.Handle("/metrics", metrics.GetHandler()).Methods("GET")
 
+	// Configurar CORS
+	middleware.SetCORSConfig(&cfg)
+
 	// Aplicar middlewares
 	handler := middleware.ApplyMiddlewares(router)
 

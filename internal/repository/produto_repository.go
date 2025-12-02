@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"api-go-arquitetura/internal/model"
 
@@ -40,6 +41,7 @@ func (r *mongoProdutoRepository) Create(ctx context.Context, produto model.Produ
 		return model.Produto{}, err
 	}
 	produto.ID = id
+	produto.BeforeCreate() // Inicializar timestamps
 	_, err = r.Collection.InsertOne(ctx, produto)
 	if err != nil {
 		return model.Produto{}, err
@@ -73,6 +75,19 @@ func (r *mongoProdutoRepository) FindByID(ctx context.Context, id int) (model.Pr
 
 func (r *mongoProdutoRepository) Update(ctx context.Context, id int, produto model.Produto) (model.Produto, error) {
 	produto.ID = id
+	produto.BeforeUpdate() // Atualizar timestamp
+	
+	// Buscar produto existente para preservar CreatedAt
+	var existing model.Produto
+	err := r.Collection.FindOne(ctx, bson.M{"id": id}).Decode(&existing)
+	if err != nil {
+		if err == mongo.ErrNoDocuments {
+			return model.Produto{}, errors.New("not found")
+		}
+		return model.Produto{}, err
+	}
+	produto.CreatedAt = existing.CreatedAt // Preservar CreatedAt
+	
 	res, err := r.Collection.ReplaceOne(ctx, bson.M{"id": id}, produto)
 	if err != nil {
 		return model.Produto{}, err
@@ -84,6 +99,9 @@ func (r *mongoProdutoRepository) Update(ctx context.Context, id int, produto mod
 }
 
 func (r *mongoProdutoRepository) Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error) {
+	// Adicionar updated_at automaticamente
+	updates["updated_at"] = time.Now()
+	
 	update := bson.M{"$set": updates}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	var updated model.Produto
@@ -108,19 +126,24 @@ func (r *mongoProdutoRepository) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
-// FindAllPaginated retorna produtos paginados com filtros
-func (r *mongoProdutoRepository) FindAllPaginated(ctx context.Context, skip, limit int64, filter map[string]interface{}) ([]model.Produto, error) {
+// FindAllPaginated retorna produtos paginados com filtros e ordenação
+func (r *mongoProdutoRepository) FindAllPaginated(ctx context.Context, skip, limit int64, filter map[string]interface{}, sort bson.D) ([]model.Produto, error) {
 	// Converter filter para bson.M
 	mongoFilter := bson.M{}
 	if filter != nil {
 		mongoFilter = bson.M(filter)
 	}
 
+	// Se sort estiver vazio, usar ordenação padrão por ID
+	if len(sort) == 0 {
+		sort = bson.D{{Key: "id", Value: 1}}
+	}
+
 	// Opções de paginação
 	opts := options.Find().
 		SetSkip(skip).
 		SetLimit(limit).
-		SetSort(bson.D{{"id", 1}}) // Ordenar por ID
+		SetSort(sort)
 
 	cursor, err := r.Collection.Find(ctx, mongoFilter, opts)
 	if err != nil {

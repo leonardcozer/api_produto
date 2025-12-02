@@ -68,3 +68,12 @@ func GenerateProdutosListKey(page, pageSize int, filters map[string]interface{})
 	return key
 }
 
+// InvalidateListCache invalida todas as listas em cache
+// Em produção, seria melhor usar padrões de chave ou tags
+func InvalidateListCache(ctx context.Context, cache Cache) error {
+	// Por enquanto, não implementamos limpeza completa
+	// O cache será invalidado naturalmente pelo TTL
+	// Em produção, usaríamos Redis com padrões de chave ou tags
+	return nil
+}
+

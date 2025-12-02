@@ -56,9 +56,9 @@ func (s *produtoService) Create(ctx context.Context, produto model.Produto) (mod
 
 	// Invalidar cache de listas (novo produto adicionado)
 	if s.cache != nil {
-		// Limpar todas as listas em cache (simplificado)
-		// Em produção, seria melhor usar padrões de chave ou tags
-		logger.Debug("Cache de listas invalidado após criação de produto")
+		// Em produção, seria melhor usar padrões de chave ou tags do Redis
+		// Por enquanto, o cache será invalidado naturalmente pelo TTL
+		logger.Debug("Cache de listas será invalidado pelo TTL após criação de produto")
 	}
 
 	return result, nil
@@ -214,13 +214,45 @@ func (s *produtoService) Delete(ctx context.Context, id int) error {
 	return nil
 }
 
-// FindAllPaginated retorna produtos paginados com filtros
-func (s *produtoService) FindAllPaginated(ctx context.Context, pagination dto.PaginationRequest, filter dto.FilterRequest) ([]model.Produto, dto.PaginationResponse, error) {
+// FindAllPaginated retorna produtos paginados com filtros e ordenação
+func (s *produtoService) FindAllPaginated(ctx context.Context, pagination dto.PaginationRequest, filter dto.FilterRequest, sort dto.SortRequest) ([]model.Produto, dto.PaginationResponse, error) {
 	// Validar paginação
 	pagination.Validate()
 
+	// Validar ordenação
+	if err := sort.Validate(); err != nil {
+		return nil, dto.PaginationResponse{}, errors.ErrInvalidInput.WithDetails(err.Error())
+	}
+
 	// Converter filtro para MongoDB
 	mongoFilter := filter.ToMongoFilter()
+
+	// Converter ordenação para MongoDB
+	mongoSort := sort.ToMongoSort()
+
+	// Gerar chave de cache para a lista
+	cacheKey := cache.GenerateProdutosListKey(pagination.Page, pagination.PageSize, mongoFilter)
+
+	// Tentar buscar do cache primeiro
+	if s.cache != nil {
+		cachedData, err := s.cache.Get(ctx, cacheKey)
+		if err == nil {
+			// Cache hit
+			var cachedResult struct {
+				Produtos []model.Produto
+				Total    int64
+			}
+			if err := cache.Decode(cachedData, &cachedResult); err == nil {
+				logger.WithFields(map[string]interface{}{
+					"cache_key": cacheKey,
+					"page":       pagination.Page,
+				}).Debug("Cache hit para lista de produtos")
+				
+				paginationResp := dto.NewPaginationResponse(pagination.Page, pagination.PageSize, int(cachedResult.Total))
+				return cachedResult.Produtos, paginationResp, nil
+			}
+		}
+	}
 
 	// Contar total de documentos
 	totalItems, err := s.repo.Count(ctx, mongoFilter)
@@ -229,9 +261,25 @@ func (s *produtoService) FindAllPaginated(ctx context.Context, pagination dto.Pa
 	}
 
 	// Buscar produtos paginados
-	produtos, err := s.repo.FindAllPaginated(ctx, pagination.GetSkip(), pagination.GetLimit(), mongoFilter)
+	produtos, err := s.repo.FindAllPaginated(ctx, pagination.GetSkip(), pagination.GetLimit(), mongoFilter, mongoSort)
 	if err != nil {
 		return nil, dto.PaginationResponse{}, errors.WrapError(err, errors.ErrDatabase)
+	}
+
+	// Armazenar no cache
+	if s.cache != nil {
+		cachedResult := struct {
+			Produtos []model.Produto
+			Total    int64
+		}{
+			Produtos: produtos,
+			Total:    totalItems,
+		}
+		if cachedData, err := cache.Encode(cachedResult); err == nil {
+			if err := s.cache.Set(ctx, cacheKey, cachedData, s.ttl); err != nil {
+				logger.WithField("error", err).Warn("Erro ao armazenar lista no cache")
+			}
+		}
 	}
 
 	// Criar resposta de paginação

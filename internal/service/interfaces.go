@@ -16,6 +16,6 @@ type ProdutoService interface {
 	Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error)
 	Delete(ctx context.Context, id int) error
 	// Novos métodos para paginação e filtros
-	FindAllPaginated(ctx context.Context, pagination dto.PaginationRequest, filter dto.FilterRequest) ([]model.Produto, dto.PaginationResponse, error)
+	FindAllPaginated(ctx context.Context, pagination dto.PaginationRequest, filter dto.FilterRequest, sort dto.SortRequest) ([]model.Produto, dto.PaginationResponse, error)
 }
 

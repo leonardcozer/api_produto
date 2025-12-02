@@ -35,6 +35,12 @@ type Config struct {
 	RedisAddr      string        // Endereço do Redis (ex: "localhost:6379")
 	RedisPassword  string        // Senha do Redis
 	RedisDB        int           // Database do Redis
+	
+	// CORS
+	CORSAllowedOrigins []string // Origens permitidas (vazio = todas)
+	CORSAllowedMethods []string // Métodos permitidos
+	CORSAllowedHeaders []string // Headers permitidos
+	CORSCredentials    bool     // Permitir credenciais
 }
 
 // Load carrega as configurações da aplicação a partir de variáveis de ambiente
@@ -73,6 +79,12 @@ func Load() Config {
 		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword: getEnv("REDIS_PASSWORD", ""),
 		RedisDB:        getIntEnv("REDIS_DB", 0),
+		
+		// CORS
+		CORSAllowedOrigins: getStringSliceEnv("CORS_ALLOWED_ORIGINS", []string{"*"}),
+		CORSAllowedMethods: getStringSliceEnv("CORS_ALLOWED_METHODS", []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"}),
+		CORSAllowedHeaders: getStringSliceEnv("CORS_ALLOWED_HEADERS", []string{"Content-Type", "Authorization"}),
+		CORSCredentials:    getBoolEnv("CORS_CREDENTIALS", false),
 	}
 }
 
@@ -129,6 +141,25 @@ func getIntEnv(key string, def int) int {
 		if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
 			return result
 		}
+	}
+	return def
+}
+
+// getStringSliceEnv obtém uma variável de ambiente como slice de strings (separado por vírgula) ou retorna o valor padrão
+func getStringSliceEnv(key string, def []string) []string {
+	if value := os.Getenv(key); value != "" {
+		if value == "*" {
+			return []string{"*"}
+		}
+		return strings.Split(value, ",")
+	}
+	return def
+}
+
+// getBoolEnv obtém uma variável de ambiente como bool ou retorna o valor padrão
+func getBoolEnv(key string, def bool) bool {
+	if value := os.Getenv(key); value != "" {
+		return strings.ToLower(value) == "true" || value == "1"
 	}
 	return def
 }

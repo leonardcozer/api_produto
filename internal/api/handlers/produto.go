@@ -47,10 +47,22 @@ func (h *ProdutoHandler) GetProdutos(w http.ResponseWriter, r *http.Request) {
 		Descricao: getStringQuery(r, "descricao"),
 	}
 
+	// Parse de ordenação
+	sort := dto.GetSortFromQuery(
+		r.URL.Query().Get("sort"),
+		r.URL.Query().Get("order"),
+	)
+	
+	// Validar ordenação
+	if validationErrors := validator.Validate(&sort); len(validationErrors) > 0 {
+		utils.ValidationErrorResponse(w, validationErrors)
+		return
+	}
+
 	// Se não há filtros e paginação padrão, usar método antigo para compatibilidade
-	if filter.IsEmpty() && pagination.Page == 1 && pagination.PageSize == 10 {
+	if filter.IsEmpty() && pagination.Page == 1 && pagination.PageSize == 10 && sort.Field == "" {
 		// Verificar se há parâmetros de query explícitos
-		if r.URL.Query().Get("page") == "" && r.URL.Query().Get("pageSize") == "" {
+		if r.URL.Query().Get("page") == "" && r.URL.Query().Get("pageSize") == "" && r.URL.Query().Get("sort") == "" {
 			// Usar método antigo (sem paginação)
 			produtos, err := h.service.FindAll(ctx)
 			if err != nil {
@@ -64,7 +76,7 @@ func (h *ProdutoHandler) GetProdutos(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Usar método paginado
-	produtos, paginationResp, err := h.service.FindAllPaginated(ctx, pagination, filter)
+	produtos, paginationResp, err := h.service.FindAllPaginated(ctx, pagination, filter, sort)
 	if err != nil {
 		utils.ErrorResponse(w, errors.WrapError(err, errors.ErrDatabase))
 		return

@@ -29,3 +29,13 @@ func DecodeProdutos(data []byte) ([]model.Produto, error) {
 	return produtos, err
 }
 
+// Encode codifica qualquer valor para JSON (genérico)
+func Encode(v interface{}) ([]byte, error) {
+	return json.Marshal(v)
+}
+
+// Decode decodifica qualquer valor de JSON (genérico)
+func Decode(data []byte, v interface{}) error {
+	return json.Unmarshal(data, v)
+}
+

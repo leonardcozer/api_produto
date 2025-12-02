@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"api-go-arquitetura/internal/database"
 	"api-go-arquitetura/internal/model"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -36,17 +37,23 @@ func (r *mongoProdutoRepository) getNextID(ctx context.Context) (int, error) {
 }
 
 func (r *mongoProdutoRepository) Create(ctx context.Context, produto model.Produto) (model.Produto, error) {
-	id, err := r.getNextID(ctx)
-	if err != nil {
-		return model.Produto{}, err
-	}
-	produto.ID = id
-	produto.BeforeCreate() // Inicializar timestamps
-	_, err = r.Collection.InsertOne(ctx, produto)
-	if err != nil {
-		return model.Produto{}, err
-	}
-	return produto, nil
+	// Usar retry logic para operação crítica
+	retryOpts := database.DefaultRetryOptions()
+	result, err := database.RetryWithResult(ctx, func() (model.Produto, error) {
+		id, err := r.getNextID(ctx)
+		if err != nil {
+			return model.Produto{}, err
+		}
+		produto.ID = id
+		produto.BeforeCreate() // Inicializar timestamps
+		_, err = r.Collection.InsertOne(ctx, produto)
+		if err != nil {
+			return model.Produto{}, err
+		}
+		return produto, nil
+	}, retryOpts)
+	
+	return result, err
 }
 
 func (r *mongoProdutoRepository) FindAll(ctx context.Context) ([]model.Produto, error) {
@@ -62,8 +69,13 @@ func (r *mongoProdutoRepository) FindAll(ctx context.Context) ([]model.Produto, 
 }
 
 func (r *mongoProdutoRepository) FindByID(ctx context.Context, id int) (model.Produto, error) {
+	// Filtrar produtos deletados (soft delete)
+	filter := bson.M{
+		"id":        id,
+		"deleted_at": bson.M{"$exists": false},
+	}
 	var produto model.Produto
-	err := r.Collection.FindOne(ctx, bson.M{"id": id}).Decode(&produto)
+	err := r.Collection.FindOne(ctx, filter).Decode(&produto)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return model.Produto{}, errors.New("not found")
@@ -74,38 +86,55 @@ func (r *mongoProdutoRepository) FindByID(ctx context.Context, id int) (model.Pr
 }
 
 func (r *mongoProdutoRepository) Update(ctx context.Context, id int, produto model.Produto) (model.Produto, error) {
-	produto.ID = id
-	produto.BeforeUpdate() // Atualizar timestamp
-	
-	// Buscar produto existente para preservar CreatedAt
-	var existing model.Produto
-	err := r.Collection.FindOne(ctx, bson.M{"id": id}).Decode(&existing)
-	if err != nil {
-		if err == mongo.ErrNoDocuments {
+	// Usar retry logic para operação crítica
+	retryOpts := database.DefaultRetryOptions()
+	result, err := database.RetryWithResult(ctx, func() (model.Produto, error) {
+		produto.ID = id
+		produto.BeforeUpdate() // Atualizar timestamp
+		
+		// Buscar produto existente para preservar CreatedAt e verificar se não está deletado
+		filter := bson.M{
+			"id":        id,
+			"deleted_at": bson.M{"$exists": false},
+		}
+		var existing model.Produto
+		err := r.Collection.FindOne(ctx, filter).Decode(&existing)
+		if err != nil {
+			if err == mongo.ErrNoDocuments {
+				return model.Produto{}, errors.New("not found")
+			}
+			return model.Produto{}, err
+		}
+		produto.CreatedAt = existing.CreatedAt // Preservar CreatedAt
+		produto.DeletedAt = existing.DeletedAt // Preservar DeletedAt (soft delete)
+		
+		res, err := r.Collection.ReplaceOne(ctx, filter, produto)
+		if err != nil {
+			return model.Produto{}, err
+		}
+		if res.MatchedCount == 0 {
 			return model.Produto{}, errors.New("not found")
 		}
-		return model.Produto{}, err
-	}
-	produto.CreatedAt = existing.CreatedAt // Preservar CreatedAt
+		return produto, nil
+	}, retryOpts)
 	
-	res, err := r.Collection.ReplaceOne(ctx, bson.M{"id": id}, produto)
-	if err != nil {
-		return model.Produto{}, err
-	}
-	if res.MatchedCount == 0 {
-		return model.Produto{}, errors.New("not found")
-	}
-	return produto, nil
+	return result, err
 }
 
 func (r *mongoProdutoRepository) Patch(ctx context.Context, id int, updates map[string]interface{}) (model.Produto, error) {
 	// Adicionar updated_at automaticamente
 	updates["updated_at"] = time.Now()
 	
+	// Filtrar produtos deletados (soft delete)
+	filter := bson.M{
+		"id":        id,
+		"deleted_at": bson.M{"$exists": false},
+	}
+	
 	update := bson.M{"$set": updates}
 	opts := options.FindOneAndUpdate().SetReturnDocument(options.After)
 	var updated model.Produto
-	err := r.Collection.FindOneAndUpdate(ctx, bson.M{"id": id}, update, opts).Decode(&updated)
+	err := r.Collection.FindOneAndUpdate(ctx, filter, update, opts).Decode(&updated)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return model.Produto{}, errors.New("not found")
@@ -116,14 +145,27 @@ func (r *mongoProdutoRepository) Patch(ctx context.Context, id int, updates map[
 }
 
 func (r *mongoProdutoRepository) Delete(ctx context.Context, id int) error {
-	res, err := r.Collection.DeleteOne(ctx, bson.M{"id": id})
-	if err != nil {
-		return err
-	}
-	if res.DeletedCount == 0 {
-		return errors.New("not found")
-	}
-	return nil
+	// Soft delete: marcar como deletado ao invés de remover
+	retryOpts := database.DefaultRetryOptions()
+	err := database.Retry(ctx, func() error {
+		now := time.Now()
+		update := bson.M{
+			"$set": bson.M{
+				"deleted_at": now,
+				"updated_at": now,
+			},
+		}
+		res, err := r.Collection.UpdateOne(ctx, bson.M{"id": id, "deleted_at": bson.M{"$exists": false}}, update)
+		if err != nil {
+			return err
+		}
+		if res.MatchedCount == 0 {
+			return errors.New("not found")
+		}
+		return nil
+	}, retryOpts)
+	
+	return err
 }
 
 // FindAllPaginated retorna produtos paginados com filtros e ordenação
@@ -133,6 +175,8 @@ func (r *mongoProdutoRepository) FindAllPaginated(ctx context.Context, skip, lim
 	if filter != nil {
 		mongoFilter = bson.M(filter)
 	}
+	// Filtrar produtos deletados (soft delete)
+	mongoFilter["deleted_at"] = bson.M{"$exists": false}
 
 	// Se sort estiver vazio, usar ordenação padrão por ID
 	if len(sort) == 0 {
@@ -165,6 +209,8 @@ func (r *mongoProdutoRepository) Count(ctx context.Context, filter map[string]in
 	if filter != nil {
 		mongoFilter = bson.M(filter)
 	}
+	// Filtrar produtos deletados (soft delete)
+	mongoFilter["deleted_at"] = bson.M{"$exists": false}
 
 	count, err := r.Collection.CountDocuments(ctx, mongoFilter)
 	if err != nil {

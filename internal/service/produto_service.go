@@ -8,6 +8,7 @@ import (
 	"api-go-arquitetura/internal/dto"
 	"api-go-arquitetura/internal/errors"
 	"api-go-arquitetura/internal/logger"
+	"api-go-arquitetura/internal/metrics"
 	"api-go-arquitetura/internal/model"
 	"api-go-arquitetura/internal/repository"
 )
@@ -82,16 +83,23 @@ func (s *produtoService) FindByID(ctx context.Context, id int) (model.Produto, e
 	// Tentar buscar do cache primeiro
 	if s.cache != nil {
 		cacheKey := cache.GenerateProdutoKey(id)
+		start := time.Now()
 		cachedData, err := s.cache.Get(ctx, cacheKey)
+		duration := time.Since(start)
+		
 		if err == nil {
 			produto, err := cache.DecodeProduto(cachedData)
 			if err == nil {
+				metrics.RecordCacheHit("get", duration)
 				logger.WithFields(map[string]interface{}{
 					"id":        id,
 					"cache_key": cacheKey,
 				}).Debug("Cache hit para produto")
 				return produto, nil
 			}
+			metrics.RecordCacheError("get", duration)
+		} else {
+			metrics.RecordCacheMiss("get", duration)
 		}
 	}
 
@@ -110,8 +118,12 @@ func (s *produtoService) FindByID(ctx context.Context, id int) (model.Produto, e
 		cacheKey := cache.GenerateProdutoKey(id)
 		cachedData, err := cache.EncodeProduto(result)
 		if err == nil {
+			start := time.Now()
 			if err := s.cache.Set(ctx, cacheKey, cachedData, s.ttl); err != nil {
+				metrics.RecordCacheError("set", time.Since(start))
 				logger.WithField("error", err).Warn("Erro ao armazenar produto no cache")
+			} else {
+				metrics.RecordCacheOperation("set", "success", time.Since(start))
 			}
 		}
 	}
@@ -142,8 +154,12 @@ func (s *produtoService) Update(ctx context.Context, id int, produto model.Produ
 	// Invalidar cache do produto atualizado
 	if s.cache != nil {
 		cacheKey := cache.GenerateProdutoKey(id)
+		start := time.Now()
 		if err := s.cache.Delete(ctx, cacheKey); err != nil {
+			metrics.RecordCacheError("delete", time.Since(start))
 			logger.WithField("error", err).Warn("Erro ao invalidar cache do produto")
+		} else {
+			metrics.RecordCacheOperation("delete", "success", time.Since(start))
 		}
 		// Invalidar cache de listas também
 		logger.Debug("Cache invalidado após atualização de produto")
@@ -177,8 +193,12 @@ func (s *produtoService) Patch(ctx context.Context, id int, updates map[string]i
 	// Invalidar cache do produto atualizado
 	if s.cache != nil {
 		cacheKey := cache.GenerateProdutoKey(id)
+		start := time.Now()
 		if err := s.cache.Delete(ctx, cacheKey); err != nil {
+			metrics.RecordCacheError("delete", time.Since(start))
 			logger.WithField("error", err).Warn("Erro ao invalidar cache do produto")
+		} else {
+			metrics.RecordCacheOperation("delete", "success", time.Since(start))
 		}
 		// Invalidar cache de listas também
 		logger.Debug("Cache invalidado após patch de produto")
@@ -204,8 +224,12 @@ func (s *produtoService) Delete(ctx context.Context, id int) error {
 	// Invalidar cache do produto deletado
 	if s.cache != nil {
 		cacheKey := cache.GenerateProdutoKey(id)
+		start := time.Now()
 		if err := s.cache.Delete(ctx, cacheKey); err != nil {
+			metrics.RecordCacheError("delete", time.Since(start))
 			logger.WithField("error", err).Warn("Erro ao invalidar cache do produto")
+		} else {
+			metrics.RecordCacheOperation("delete", "success", time.Since(start))
 		}
 		// Invalidar cache de listas também
 		logger.Debug("Cache invalidado após deleção de produto")
@@ -235,7 +259,10 @@ func (s *produtoService) FindAllPaginated(ctx context.Context, pagination dto.Pa
 
 	// Tentar buscar do cache primeiro
 	if s.cache != nil {
+		start := time.Now()
 		cachedData, err := s.cache.Get(ctx, cacheKey)
+		duration := time.Since(start)
+		
 		if err == nil {
 			// Cache hit
 			var cachedResult struct {
@@ -243,6 +270,7 @@ func (s *produtoService) FindAllPaginated(ctx context.Context, pagination dto.Pa
 				Total    int64
 			}
 			if err := cache.Decode(cachedData, &cachedResult); err == nil {
+				metrics.RecordCacheHit("get_list", duration)
 				logger.WithFields(map[string]interface{}{
 					"cache_key": cacheKey,
 					"page":       pagination.Page,
@@ -251,6 +279,9 @@ func (s *produtoService) FindAllPaginated(ctx context.Context, pagination dto.Pa
 				paginationResp := dto.NewPaginationResponse(pagination.Page, pagination.PageSize, int(cachedResult.Total))
 				return cachedResult.Produtos, paginationResp, nil
 			}
+			metrics.RecordCacheError("get_list", duration)
+		} else {
+			metrics.RecordCacheMiss("get_list", duration)
 		}
 	}
 
@@ -276,8 +307,12 @@ func (s *produtoService) FindAllPaginated(ctx context.Context, pagination dto.Pa
 			Total:    totalItems,
 		}
 		if cachedData, err := cache.Encode(cachedResult); err == nil {
+			start := time.Now()
 			if err := s.cache.Set(ctx, cacheKey, cachedData, s.ttl); err != nil {
+				metrics.RecordCacheError("set_list", time.Since(start))
 				logger.WithField("error", err).Warn("Erro ao armazenar lista no cache")
+			} else {
+				metrics.RecordCacheOperation("set_list", "success", time.Since(start))
 			}
 		}
 	}

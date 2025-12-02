@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"api-go-arquitetura/internal/logger"
+	"api-go-arquitetura/internal/metrics"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -72,7 +73,22 @@ func Connect(opts ConnectOptions) (*mongo.Client, error) {
 	}
 
 	logger.WithField("uri", opts.URI).Info("Conexão com MongoDB estabelecida com sucesso")
+	
+	// Atualizar métricas de conexão
+	updateConnectionMetrics(client, opts.MaxPoolSize)
+	
 	return client, nil
+}
+
+// updateConnectionMetrics atualiza as métricas de conexão do banco de dados
+func updateConnectionMetrics(client *mongo.Client, maxPoolSize uint64) {
+	// Obter estatísticas do pool de conexões
+	stats := client.NumberSessionsInProgress()
+	
+	// Atualizar métricas
+	metrics.SetDatabaseConnections("active", float64(stats))
+	metrics.SetDatabaseConnections("total", float64(maxPoolSize))
+	metrics.SetDatabaseConnections("idle", float64(maxPoolSize)-float64(stats))
 }
 
 // Ping verifica se a conexão com o MongoDB está funcionando

@@ -64,6 +64,34 @@ var (
 			Help: "Número de conexões HTTP ativas",
 		},
 	)
+
+	// CacheOperations é um contador para operações de cache
+	CacheOperations = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "cache_operations_total",
+			Help: "Total de operações de cache",
+		},
+		[]string{"operation", "status"}, // operation: get, set, delete, status: hit, miss, error
+	)
+
+	// CacheOperationDuration é um histograma para duração de operações de cache
+	CacheOperationDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "cache_operation_duration_seconds",
+			Help:    "Duração das operações de cache em segundos",
+			Buckets: []float64{0.0001, 0.0005, 0.001, 0.005, 0.01, 0.025, 0.05, 0.1},
+		},
+		[]string{"operation"},
+	)
+
+	// DatabaseConnections é um gauge para conexões de banco de dados
+	DatabaseConnections = promauto.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "database_connections",
+			Help: "Número de conexões de banco de dados",
+		},
+		[]string{"state"}, // state: active, idle, total
+	)
 )
 
 // RecordHTTPRequest registra uma requisição HTTP
@@ -85,6 +113,32 @@ func RecordHTTPRequest(method, path string, statusCode int, duration time.Durati
 func RecordDatabaseOperation(operation, collection, status string, duration time.Duration) {
 	DatabaseOperations.WithLabelValues(operation, collection, status).Inc()
 	DatabaseOperationDuration.WithLabelValues(operation, collection).Observe(duration.Seconds())
+}
+
+// RecordCacheOperation registra uma operação de cache
+func RecordCacheOperation(operation, status string, duration time.Duration) {
+	CacheOperations.WithLabelValues(operation, status).Inc()
+	CacheOperationDuration.WithLabelValues(operation).Observe(duration.Seconds())
+}
+
+// RecordCacheHit registra um cache hit
+func RecordCacheHit(operation string, duration time.Duration) {
+	RecordCacheOperation(operation, "hit", duration)
+}
+
+// RecordCacheMiss registra um cache miss
+func RecordCacheMiss(operation string, duration time.Duration) {
+	RecordCacheOperation(operation, "miss", duration)
+}
+
+// RecordCacheError registra um erro de cache
+func RecordCacheError(operation string, duration time.Duration) {
+	RecordCacheOperation(operation, "error", duration)
+}
+
+// SetDatabaseConnections atualiza o número de conexões de banco de dados
+func SetDatabaseConnections(state string, count float64) {
+	DatabaseConnections.WithLabelValues(state).Set(count)
 }
 
 // GetHandler retorna o handler do Prometheus

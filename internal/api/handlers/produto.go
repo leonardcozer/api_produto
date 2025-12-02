@@ -28,8 +28,25 @@ func NewProdutoHandler(svc service.ProdutoService) *ProdutoHandler {
 	}
 }
 
-// GetProdutos lista todos os produtos (com suporte a paginação e filtros)
-// GET /api/produtos?page=1&pageSize=10&nome=notebook&precoMin=1000&precoMax=5000
+// GetProdutos lista todos os produtos (com suporte a paginação, filtros e ordenação)
+// @Summary Lista produtos com paginação, filtros e ordenação
+// @Description Retorna uma lista paginada de produtos com suporte a filtros e ordenação
+// @Tags produtos
+// @Accept json
+// @Produce json
+// @Param page query int false "Número da página (padrão: 1)" default(1)
+// @Param pageSize query int false "Tamanho da página (padrão: 10, máximo: 100)" default(10)
+// @Param nome query string false "Filtro por nome (busca parcial, case-insensitive)"
+// @Param precoMin query number false "Preço mínimo"
+// @Param precoMax query number false "Preço máximo"
+// @Param descricao query string false "Filtro por descrição (busca parcial, case-insensitive)"
+// @Param sort query string false "Campo para ordenação (id, nome, preco, descricao, created_at, updated_at)" default(id)
+// @Param order query string false "Ordem de ordenação (asc, desc)" default(asc)
+// @Success 200 {object} dto.PaginatedResponse
+// @Failure 400 {object} errors.APIError
+// @Failure 500 {object} errors.APIError
+// @Router /api/v1/produtos [get]
+// GET /api/v1/produtos?page=1&pageSize=10&nome=notebook&precoMin=1000&precoMax=5000&sort=preco&order=desc
 func (h *ProdutoHandler) GetProdutos(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	

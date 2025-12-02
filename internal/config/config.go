@@ -28,6 +28,13 @@ type Config struct {
 	// Observability
 	LokiURL string
 	LokiJob string
+	
+	// Cache
+	CacheType      string        // "memory" ou "redis"
+	CacheTTL       time.Duration // TTL padrão do cache
+	RedisAddr      string        // Endereço do Redis (ex: "localhost:6379")
+	RedisPassword  string        // Senha do Redis
+	RedisDB        int           // Database do Redis
 }
 
 // Load carrega as configurações da aplicação a partir de variáveis de ambiente
@@ -59,6 +66,13 @@ func Load() Config {
 		// Observability
 		LokiURL: getEnv("LOKI_URL", ""),
 		LokiJob: getEnv("LOKI_JOB", "ARQUITETURA"),
+		
+		// Cache
+		CacheType:     getEnv("CACHE_TYPE", "memory"), // memory ou redis
+		CacheTTL:      getDurationEnv("CACHE_TTL", 5*time.Minute),
+		RedisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword: getEnv("REDIS_PASSWORD", ""),
+		RedisDB:        getIntEnv("REDIS_DB", 0),
 	}
 }
 
@@ -101,6 +115,17 @@ func getDurationEnv(key string, def time.Duration) time.Duration {
 func getUint64Env(key string, def uint64) uint64 {
 	if value := os.Getenv(key); value != "" {
 		var result uint64
+		if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
+			return result
+		}
+	}
+	return def
+}
+
+// getIntEnv obtém uma variável de ambiente como int ou retorna o valor padrão
+func getIntEnv(key string, def int) int {
+	if value := os.Getenv(key); value != "" {
+		var result int
 		if _, err := fmt.Sscanf(value, "%d", &result); err == nil {
 			return result
 		}

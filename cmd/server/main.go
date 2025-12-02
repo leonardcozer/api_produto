@@ -12,6 +12,7 @@ import (
 	"api-go-arquitetura/internal/api"
 	"api-go-arquitetura/internal/api/handlers"
 	"api-go-arquitetura/internal/api/middleware"
+	"api-go-arquitetura/internal/cache"
 	"api-go-arquitetura/internal/config"
 	"api-go-arquitetura/internal/database"
 	"api-go-arquitetura/internal/logger"
@@ -84,8 +85,27 @@ func main() {
 	// Criar repositório
 	prodRepo := repository.NewProdutoRepository(col)
 
-	// Criar service e injetar o repositório
-	prodService := service.NewProdutoService(prodRepo)
+	// Inicializar cache
+	var cacheInstance cache.Cache
+	if cfg.CacheType == "redis" {
+		redisCache, err := cache.NewRedisCache(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+		if err != nil {
+			logger.WithField("error", err).Warn("Erro ao conectar ao Redis, usando cache em memória")
+			cacheInstance = cache.NewMemoryCache()
+		} else {
+			cacheInstance = redisCache
+			logger.WithFields(map[string]interface{}{
+				"type": "redis",
+				"addr": cfg.RedisAddr,
+			}).Info("Cache Redis inicializado")
+		}
+	} else {
+		cacheInstance = cache.NewMemoryCache()
+		logger.WithField("type", "memory").Info("Cache em memória inicializado")
+	}
+
+	// Criar service e injetar o repositório e cache
+	prodService := service.NewProdutoServiceWithTTL(prodRepo, cacheInstance, cfg.CacheTTL)
 
 	// Criar handler e injetar o service
 	produtoHandler := handlers.NewProdutoHandler(prodService)

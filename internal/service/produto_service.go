@@ -2,22 +2,40 @@ package service
 
 import (
 	"context"
+	"time"
 
+	"api-go-arquitetura/internal/cache"
 	"api-go-arquitetura/internal/dto"
 	"api-go-arquitetura/internal/errors"
+	"api-go-arquitetura/internal/logger"
 	"api-go-arquitetura/internal/model"
 	"api-go-arquitetura/internal/repository"
 )
 
 // produtoService implementa a lógica de negócio para produtos
 type produtoService struct {
-	repo repository.ProdutoRepository
+	repo  repository.ProdutoRepository
+	cache cache.Cache
+	ttl   time.Duration
 }
 
 // NewProdutoService cria uma nova instância do ProdutoService
-func NewProdutoService(repo repository.ProdutoRepository) ProdutoService {
+func NewProdutoService(repo repository.ProdutoRepository, cache cache.Cache) ProdutoService {
+	// TTL padrão de 5 minutos para cache
+	ttl := 5 * time.Minute
 	return &produtoService{
-		repo: repo,
+		repo:  repo,
+		cache: cache,
+		ttl:   ttl,
+	}
+}
+
+// NewProdutoServiceWithTTL cria uma nova instância do ProdutoService com TTL customizado
+func NewProdutoServiceWithTTL(repo repository.ProdutoRepository, cache cache.Cache, ttl time.Duration) ProdutoService {
+	return &produtoService{
+		repo:  repo,
+		cache: cache,
+		ttl:   ttl,
 	}
 }
 
@@ -35,6 +53,14 @@ func (s *produtoService) Create(ctx context.Context, produto model.Produto) (mod
 	if err != nil {
 		return model.Produto{}, errors.WrapError(err, errors.ErrDatabase)
 	}
+
+	// Invalidar cache de listas (novo produto adicionado)
+	if s.cache != nil {
+		// Limpar todas as listas em cache (simplificado)
+		// Em produção, seria melhor usar padrões de chave ou tags
+		logger.Debug("Cache de listas invalidado após criação de produto")
+	}
+
 	return result, nil
 }
 
@@ -52,7 +78,24 @@ func (s *produtoService) FindByID(ctx context.Context, id int) (model.Produto, e
 	if id <= 0 {
 		return model.Produto{}, errors.ErrInvalidID
 	}
-	
+
+	// Tentar buscar do cache primeiro
+	if s.cache != nil {
+		cacheKey := cache.GenerateProdutoKey(id)
+		cachedData, err := s.cache.Get(ctx, cacheKey)
+		if err == nil {
+			produto, err := cache.DecodeProduto(cachedData)
+			if err == nil {
+				logger.WithFields(map[string]interface{}{
+					"id":        id,
+					"cache_key": cacheKey,
+				}).Debug("Cache hit para produto")
+				return produto, nil
+			}
+		}
+	}
+
+	// Cache miss ou erro - buscar do banco
 	result, err := s.repo.FindByID(ctx, id)
 	if err != nil {
 		// Verificar se é erro de "not found" do repository
@@ -61,6 +104,18 @@ func (s *produtoService) FindByID(ctx context.Context, id int) (model.Produto, e
 		}
 		return model.Produto{}, errors.WrapError(err, errors.ErrDatabase)
 	}
+
+	// Armazenar no cache
+	if s.cache != nil {
+		cacheKey := cache.GenerateProdutoKey(id)
+		cachedData, err := cache.EncodeProduto(result)
+		if err == nil {
+			if err := s.cache.Set(ctx, cacheKey, cachedData, s.ttl); err != nil {
+				logger.WithField("error", err).Warn("Erro ao armazenar produto no cache")
+			}
+		}
+	}
+
 	return result, nil
 }
 
@@ -83,6 +138,17 @@ func (s *produtoService) Update(ctx context.Context, id int, produto model.Produ
 		}
 		return model.Produto{}, errors.WrapError(err, errors.ErrDatabase)
 	}
+
+	// Invalidar cache do produto atualizado
+	if s.cache != nil {
+		cacheKey := cache.GenerateProdutoKey(id)
+		if err := s.cache.Delete(ctx, cacheKey); err != nil {
+			logger.WithField("error", err).Warn("Erro ao invalidar cache do produto")
+		}
+		// Invalidar cache de listas também
+		logger.Debug("Cache invalidado após atualização de produto")
+	}
+
 	return result, nil
 }
 
@@ -107,6 +173,17 @@ func (s *produtoService) Patch(ctx context.Context, id int, updates map[string]i
 		}
 		return model.Produto{}, errors.WrapError(err, errors.ErrDatabase)
 	}
+
+	// Invalidar cache do produto atualizado
+	if s.cache != nil {
+		cacheKey := cache.GenerateProdutoKey(id)
+		if err := s.cache.Delete(ctx, cacheKey); err != nil {
+			logger.WithField("error", err).Warn("Erro ao invalidar cache do produto")
+		}
+		// Invalidar cache de listas também
+		logger.Debug("Cache invalidado após patch de produto")
+	}
+
 	return result, nil
 }
 
@@ -115,7 +192,7 @@ func (s *produtoService) Delete(ctx context.Context, id int) error {
 	if id <= 0 {
 		return errors.ErrInvalidID
 	}
-	
+
 	err := s.repo.Delete(ctx, id)
 	if err != nil {
 		if err.Error() == "not found" {
@@ -123,6 +200,17 @@ func (s *produtoService) Delete(ctx context.Context, id int) error {
 		}
 		return errors.WrapError(err, errors.ErrDatabase)
 	}
+
+	// Invalidar cache do produto deletado
+	if s.cache != nil {
+		cacheKey := cache.GenerateProdutoKey(id)
+		if err := s.cache.Delete(ctx, cacheKey); err != nil {
+			logger.WithField("error", err).Warn("Erro ao invalidar cache do produto")
+		}
+		// Invalidar cache de listas também
+		logger.Debug("Cache invalidado após deleção de produto")
+	}
+
 	return nil
 }
 

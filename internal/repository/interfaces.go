@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"api-go-arquitetura/internal/model"
+
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // ProdutoRepository define a interface para operações de produto no repositório
